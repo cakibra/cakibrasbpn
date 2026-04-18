@@ -1,3 +1,4 @@
+#![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 mod connection;
 mod errors;
@@ -74,7 +75,6 @@ fn set_autostart(_app: AppHandle, enabled: bool) -> Result<bool, String> {
     windows_proxy::set_autostart(&main_exe, enabled)
 }
 
-#[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
         .setup(|app| {
