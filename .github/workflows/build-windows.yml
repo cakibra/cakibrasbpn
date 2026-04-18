@@ -1,0 +1,76 @@
+name: Build Windows EXE
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+
+    permissions:
+      contents: read
+
+    env:
+      NODE_ENV: development
+      NPM_CONFIG_PRODUCTION: "false"
+      npm_config_registry: "https://registry.npmjs.org/"
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          registry-url: https://registry.npmjs.org/
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Rust
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: "./src-tauri -> target"
+
+      - name: Clean uploaded local folders
+        shell: powershell
+        run: |
+          if (Test-Path node_modules) { Remove-Item -Recurse -Force node_modules }
+          if (Test-Path dist) { Remove-Item -Recurse -Force dist }
+
+      - name: Download sing-box sidecar
+        shell: powershell
+        run: .\scripts\download-singbox.ps1
+
+      - name: Install frontend dependencies
+        shell: powershell
+        run: npm ci --include=dev --no-audit --no-fund
+
+      - name: Verify TypeScript compiler
+        shell: powershell
+        run: |
+          if (!(Test-Path ".\node_modules\.bin\tsc.cmd")) {
+            Write-Host "node_modules/.bin contents:"
+            if (Test-Path ".\node_modules\.bin") { Get-ChildItem ".\node_modules\.bin" }
+            Write-Error "TypeScript compiler was not installed"
+            exit 1
+          }
+
+      - name: Type check
+        shell: powershell
+        run: .\node_modules\.bin\tsc.cmd --noEmit
+
+      - name: Build Tauri app
+        shell: powershell
+        run: .\node_modules\.bin\tauri.cmd build --bundles nsis
+
+      - name: Upload installer artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: CAKIBRA-SBP-Windows
+          path: |
+            src-tauri/target/release/bundle/nsis/*.exe
+            src-tauri/target/release/*.exe
+          if-no-files-found: error
